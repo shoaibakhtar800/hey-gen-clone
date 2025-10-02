@@ -5,6 +5,12 @@
 import "./src/env.js";
 
 /** @type {import("next").NextConfig} */
-const config = {};
+const config = {
+    images: {
+        remotePatterns: [{
+            hostname: "public-hey-gen-clone-v2.s3.us-east-1.amazonaws.com",
+        }]
+    }
+};
 
 export default config;

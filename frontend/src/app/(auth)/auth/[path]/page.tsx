@@ -11,12 +11,6 @@ export function generateStaticParams() {
 }
 
 export default async function AuthPage({ params }: { params: Promise<{ path: string }> }) {
-    const session = await auth.api.getSession({
-        headers: await headers()
-    });
-
-    if (session) redirect("/");
-
     const { path } = await params
 
     return (

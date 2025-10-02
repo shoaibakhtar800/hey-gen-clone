@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { ClientHome } from "~/components/client-home";
 import { auth } from "~/lib/auth";
 
 export default async function Page() {
@@ -10,6 +11,6 @@ export default async function Page() {
   if (!session) redirect("/auth/sign-in");
 
   return (
-    <p>Logged In</p>
+    <ClientHome />
   );
 }
