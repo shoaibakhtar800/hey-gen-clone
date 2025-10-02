@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AudioDropzone } from "./audio-dropzone";
 import { toast } from "sonner";
 import { getAudioDuration } from "~/utils/media";
@@ -13,6 +13,28 @@ export const AudioUploaderAndRecorder = ({
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordTime, setRecordTime] = useState(0);
+  const audioChunks = useRef<Blob[]>([]);
+  const mediaRecorder = useRef<MediaRecorder | null>(null);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isRecording) {
+      timer = setInterval(() => {
+        setRecordTime((t) => {
+          if (t + 1 >= 15) {
+            stopRecording();
+            return 15;
+          }
+
+          return t + 1;
+        });
+      }, 1000);
+    } else {
+      setRecordTime(0);
+    }
+
+    return () => clearInterval(timer);
+  }, [isRecording]);
 
   const handleFileSelect = async (file: File) => {
     try {
@@ -29,9 +51,44 @@ export const AudioUploaderAndRecorder = ({
     }
   };
 
-  const startRecording = async () => {};
+  const startRecording = async () => {
+    setAudioUrl(null);
+    audioChunks.current = [];
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      mediaRecorder.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunks.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunks.current, { type: "audio/webm" });
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
+        setAudioBlob(blob);
+      };
 
-  const stopRecording = async () => {};
+      recorder.start();
+      setIsRecording(true);
+    } catch {
+      toast.error(
+        "Could not start recording. Please check microphone permissions.",
+      );
+    }
+  };
+
+  const stopRecording = async () => {
+    if (mediaRecorder.current?.state === "recording") {
+      mediaRecorder.current.stop();
+    }
+    setIsRecording(false);
+  };
+
+  const handleUseAudio = () => {
+    if (audioBlob) {
+      onAudioReady(audioBlob);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -54,7 +111,7 @@ export const AudioUploaderAndRecorder = ({
                 variant="destructive"
                 className="w-full"
               >
-                Record audio
+                Stop
               </Button>
             </div>
           ) : (
@@ -64,7 +121,30 @@ export const AudioUploaderAndRecorder = ({
           )}
         </>
       ) : (
-        <></>
+        <>
+          <div className="flex w-full flex-col items-center gap-2">
+            <audio
+              className="mt-2 w-full"
+              key={audioUrl}
+              controls
+              src={audioUrl}
+            />
+            <Button
+              variant="default"
+              className="flex w-full items-center justify-center"
+              onClick={handleUseAudio}
+            >
+              Use this audio
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => setAudioUrl(null)}
+            >
+              Use a different audio
+            </Button>
+          </div>
+        </>
       )}
     </div>
   );

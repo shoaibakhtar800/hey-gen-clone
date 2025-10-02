@@ -18,7 +18,10 @@ export default function AudioUploadModal({
                         Upload or record audio
                     </DialogTitle>
                 </DialogHeader>
-                <AudioUploaderAndRecorder onAudioReady={() => {}} />
+                <AudioUploaderAndRecorder onAudioReady={(blob) => {
+                    onAudioRecorded(blob);
+                    onOpenChange(false);
+                }} />
             </DialogContent>
         </Dialog>
     )

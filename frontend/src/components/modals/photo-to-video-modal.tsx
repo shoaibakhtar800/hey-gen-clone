@@ -1,4 +1,4 @@
-import { Trash2, UploadCloud } from "lucide-react";
+import { Pause, Play, Trash2, UploadCloud } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -7,11 +7,12 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Input } from "../ui/input";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import AudioUploadModal from "./audio-upload-modal";
+import ChooseVoideModal, { type Voice } from "./choose-voice-modal";
 
 const samplesPhotos = [
   {
@@ -44,11 +45,27 @@ export function PhotoToVideoModal({
   const [script, setScript] = useState("");
   const [audioModalOpen, setAudioModalOpen] = useState(false);
 
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [selectedAudioUrl, setSelectedAudioUrl] = useState<string | null>(null);
+  const [selectedAudioName, setSelectedAudioName] =
+    useState<string>("new_recording.wav");
+
   const handlePhotoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedPhotoUrl(URL.createObjectURL(file));
       setSelectedPhotoFile(file);
+    }
+  };
+
+  const togglePlay = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (audio.paused) {
+      await audio.play();
+    } else {
+      audio.pause();
     }
   };
 
@@ -134,22 +151,58 @@ export function PhotoToVideoModal({
             <div className="flex flex-1 flex-col gap-4">
               <div>
                 <div className="relative">
-                  <Textarea
-                    rows={10}
-                    maxLength={210}
-                    value={script}
-                    onChange={(e) => setScript(e.target.value)}
-                    className="min-h-32 break-all"
-                    placeholder="Type your script here or "
-                  />
-                  <Button
-                    variant="link"
-                    size="sm"
-                    onClick={() => setAudioModalOpen(true)}
-                    className={`${script ? "hidden" : ""} absolute top-7 left-0.5 text-base underline md:text-sm lg:top-[3px] lg:left-[156px]`}
-                  >
-                    upload or record audio
-                  </Button>
+                  {selectedAudioUrl ? (
+                    <>
+                      <div className="flex items-center gap-3 rounded border bg-gray-50 p-3">
+                        <Button
+                          className="mr-2"
+                          variant="ghost"
+                          onClick={togglePlay}
+                        >
+                          <Play className="h-5 w-5 text-gray-600" />
+                        </Button>
+                        <div className="flex flex-1 flex-col">
+                          <span className="text-sm font-medium">
+                            {selectedAudioName}
+                          </span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          className="ml-2"
+                          onClick={() => {
+                            setSelectedAudioUrl(null);
+                          }}
+                        >
+                          <Trash2 className="h-5 w-5 text-gray-500" />
+                        </Button>
+                        <audio
+                          id="audio-preview"
+                          ref={audioRef}
+                          src={selectedAudioUrl}
+                          style={{ display: "none" }}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Textarea
+                        rows={10}
+                        maxLength={210}
+                        value={script}
+                        onChange={(e) => setScript(e.target.value)}
+                        className="min-h-32 break-all"
+                        placeholder="Type your script here or "
+                      />
+                      <Button
+                        variant="link"
+                        size="sm"
+                        onClick={() => setAudioModalOpen(true)}
+                        className={`${script ? "hidden" : ""} absolute top-7 left-0.5 text-base underline md:text-sm lg:top-[3px] lg:left-[156px]`}
+                      >
+                        upload or record audio
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -159,8 +212,25 @@ export function PhotoToVideoModal({
           open={audioModalOpen}
           onOpenChange={setAudioModalOpen}
           onAudioRecorded={(audioBlob: Blob) => {
+            const url = URL.createObjectURL(audioBlob);
+            setSelectedAudioUrl(url);
 
+            let name =
+              "new_recording_" +
+              new Date().toLocaleString().replace(/[\s:/]/g, "_") +
+              ".wav";
+            if (audioBlob as File) {
+              name = (audioBlob as File).name;
+            }
+            setSelectedAudioName(name);
+            setAudioModalOpen(false);
           }}
+        />
+        <ChooseVoideModal
+          open={open}
+          onOpenChange={function (open: boolean): void {}}
+          onVoiceSelected={function (voice: Voice): void {}}
+          onAudioUploaded={function (file: File): void {}}
         />
       </DialogContent>
     </Dialog>

@@ -3,6 +3,7 @@
 import { Image, Languages, Video } from "lucide-react";
 import { useState } from "react";
 import { PhotoToVideoModal } from "./modals/photo-to-video-modal";
+import ChooseVoideModal from "./modals/choose-voice-modal";
 
 enum featureType {
     PhotoToVideo,
