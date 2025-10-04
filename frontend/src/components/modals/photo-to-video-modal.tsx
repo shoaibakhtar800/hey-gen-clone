@@ -1,4 +1,17 @@
-import { Pause, Play, Trash2, UploadCloud } from "lucide-react";
+import {
+  AudioWaveform,
+  Loader2,
+  Pause,
+  Play,
+  Ratio,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
+import Image from "next/image";
+import { useRef, useState } from "react";
+import Cropper, { type Area } from "react-easy-crop";
+import { useAudioPlayer } from "~/hooks/use-audio-player";
+import { Button } from "../ui/button";
 import {
   Dialog,
   DialogContent,
@@ -7,12 +20,19 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Input } from "../ui/input";
-import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
-import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import AudioUploadModal from "./audio-upload-modal";
 import ChooseVoideModal, { type Voice } from "./choose-voice-modal";
+import { Switch } from "../ui/switch";
+import { Label } from "../ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
+import getCroppedImg from "~/utils/crop-image";
 
 const samplesPhotos = [
   {
@@ -49,6 +69,23 @@ export function PhotoToVideoModal({
   const [selectedAudioUrl, setSelectedAudioUrl] = useState<string | null>(null);
   const [selectedAudioName, setSelectedAudioName] =
     useState<string>("new_recording.wav");
+  const [voiceModalOpen, setVoiceModalOpen] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState<Voice | null>(null);
+  const [customVoiceFile, setCustomVoiceFile] = useState<File | null>(null);
+
+  const [experimentalModel, setExperimentalModel] = useState(false);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [aspectRatio, setAspectRatio] = useState(1 / 1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+
+  const [enhancement, setEnhancement] = useState(true);
+  const [expressiveness, setExpressiveness] = useState(1);
+  const [resolution, setResolution] = useState("512");
+
+  const [loading, setLoading] = useState(false);
+
+  const { playingSrc, togglePlay } = useAudioPlayer();
 
   const handlePhotoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -58,7 +95,7 @@ export function PhotoToVideoModal({
     }
   };
 
-  const togglePlay = async () => {
+  const togglePlayAudio = async () => {
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -66,6 +103,33 @@ export function PhotoToVideoModal({
       await audio.play();
     } else {
       audio.pause();
+    }
+  };
+
+  const handleGenerateVideo = async () => {
+    setLoading(true);
+
+    let photS3Key: string | null = null;
+    let audioS3Key: string | null = null;
+    let voiceS3Key: string | null = null;
+
+    if (selectedPhotoUrl) {
+      let fileToUpload: File | null = null;
+
+      if (!experimentalModel && croppedAreaPixels) {
+        const croppedImage = await getCroppedImg(
+          selectedPhotoUrl,
+          croppedAreaPixels,
+        );
+        if (croppedImage) {
+          fileToUpload = selectedPhotoFile;
+        }
+      } else if (selectedPhotoFile) {
+        fileToUpload = selectedPhotoFile;
+      }
+
+      if (fileToUpload) {
+      }
     }
   };
 
@@ -85,13 +149,47 @@ export function PhotoToVideoModal({
           </DialogHeader>
           <div className="flex flex-col gap-8 p-8 lg:flex-row">
             <div className="flex w-full flex-col gap-4 lg:w-[340px]">
-              {selectedPhotoUrl ? (
+              {selectedPhotoUrl && !experimentalModel ? (
+                <div className="relative h-64 w-64">
+                  <Cropper
+                    classes={{ containerClassName: "rounded-md" }}
+                    image={selectedPhotoUrl}
+                    crop={crop}
+                    zoom={zoom}
+                    aspect={aspectRatio}
+                    onCropComplete={(_, pixels) => {
+                      setCroppedAreaPixels(pixels);
+                    }}
+                    onCropChange={setCrop}
+                    onZoomChange={setZoom}
+                  />
+                  <Button
+                    onClick={() => {
+                      if (aspectRatio === 1 / 1) {
+                        setAspectRatio(3 / 2);
+                      } else {
+                        setAspectRatio(1 / 1);
+                      }
+                    }}
+                    className="absolute top-2 right-2 rounded-full bg-white p-2 shadow hover:bg-gray-200"
+                  >
+                    <Ratio className="h-5 w-5 text-gray-600" />
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setSelectedPhotoUrl(null);
+                      setSelectedPhotoFile(null);
+                    }}
+                    className="absolute top-14 right-2 rounded-full bg-white p-2 shadow hover:bg-gray-200"
+                  >
+                    <Trash2 className="h-5 w-5 text-gray-600" />
+                  </Button>
+                </div>
+              ) : selectedPhotoUrl ? (
                 <div className="flex flex-col items-center justify-center gap-4">
                   <div className="relative">
                     <img
                       src={selectedPhotoUrl}
-                      crossOrigin="anonymous"
-                      alt="Selected Photo"
                       className="max-h-[340px] max-w-full rounded-xl border object-contain md:max-w-[340px]"
                     />
                     <Button
@@ -157,7 +255,7 @@ export function PhotoToVideoModal({
                         <Button
                           className="mr-2"
                           variant="ghost"
-                          onClick={togglePlay}
+                          onClick={togglePlayAudio}
                         >
                           <Play className="h-5 w-5 text-gray-600" />
                         </Button>
@@ -203,6 +301,141 @@ export function PhotoToVideoModal({
                       </Button>
                     </>
                   )}
+
+                  <div className="absolute bottom-2 flex w-full flex-col gap-2 px-3">
+                    <div className="mt-2 flex items-center gap-2">
+                      {!selectedAudioUrl &&
+                        (customVoiceFile ? (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-purple-600"
+                              variant="ghost"
+                              onClick={() => setVoiceModalOpen(true)}
+                            >
+                              <AudioWaveform className="h-4 w-4" />
+                              <span>{customVoiceFile.name}</span>
+                            </Button>
+                          </div>
+                        ) : selectedVoice ? (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              onClick={() => setVoiceModalOpen(true)}
+                              className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-purple-600"
+                            >
+                              <AudioWaveform className="h-4 w-4" />
+                              <span>{selectedVoice.name}</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="rounded-full bg-purple-100 text-purple-500 hover:bg-purple-200 hover:text-purple-600"
+                              onClick={() => {
+                                if (selectedVoice)
+                                  togglePlay(selectedVoice.audioSrc);
+                              }}
+                            >
+                              {playingSrc === selectedVoice.audioSrc ? (
+                                <Pause className="h-5 w-5" />
+                              ) : (
+                                <Play className="h-5 w-5" />
+                              )}
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="link"
+                            className="h-0 px-0 text-xs text-gray-500"
+                            onClick={() => setVoiceModalOpen(true)}
+                          >
+                            Select voice
+                          </Button>
+                        ))}
+                      {!selectedAudioUrl && (
+                        <span className="ml-auto text-xs text-gray-400">
+                          {script.length} / 210 (15 seconds max)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-6">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={experimentalModel}
+                    onCheckedChange={setExperimentalModel}
+                  />
+                  <span className="text-xs text-gray-700">
+                    Exprimental model
+                  </span>
+                </div>
+                {experimentalModel && (
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={enhancement}
+                      onCheckedChange={setEnhancement}
+                    />
+                    <span className="text-xs text-gray-700">Enhancement</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-6">
+                {experimentalModel && (
+                  <div>
+                    <Label className="text-sm font-medium">
+                      Expressiveness{" "}
+                      <span className="ml-1 rounded bg-gray-100 px-1 text-xs">
+                        0-1
+                      </span>
+                    </Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={expressiveness}
+                      onChange={(e) => {
+                        setExpressiveness(Number(e.target.value));
+                      }}
+                      className="mt-2 w-24"
+                    />
+                  </div>
+                )}
+
+                <div className="flex w-full items-center justify-end">
+                  {experimentalModel && (
+                    <Select
+                      value={resolution}
+                      onValueChange={(value) => setResolution(value)}
+                    >
+                      <SelectTrigger className="w-[100px] rounded border px-2 py-1 text-xs">
+                        <SelectValue placeholder="512p" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="512">512p</SelectItem>
+                        <SelectItem value="640">640p</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Button
+                    onClick={handleGenerateVideo}
+                    className="ml-2 bg-purple-600 px-4 py-2 text-sm text-white"
+                    disabled={
+                      loading ||
+                      !(
+                        (selectedPhotoFile ?? selectedPhotoUrl) &&
+                        (script.trim().length > 0 || selectedAudioUrl)
+                      )
+                    }
+                  >
+                    {loading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : null}
+                    Generate video
+                  </Button>
                 </div>
               </div>
             </div>
@@ -219,7 +452,7 @@ export function PhotoToVideoModal({
               "new_recording_" +
               new Date().toLocaleString().replace(/[\s:/]/g, "_") +
               ".wav";
-            if (audioBlob as File) {
+            if ((audioBlob as File).name) {
               name = (audioBlob as File).name;
             }
             setSelectedAudioName(name);
@@ -227,10 +460,18 @@ export function PhotoToVideoModal({
           }}
         />
         <ChooseVoideModal
-          open={open}
-          onOpenChange={function (open: boolean): void {}}
-          onVoiceSelected={function (voice: Voice): void {}}
-          onAudioUploaded={function (file: File): void {}}
+          open={voiceModalOpen}
+          onOpenChange={setVoiceModalOpen}
+          onVoiceSelected={(voice) => {
+            setSelectedVoice(voice);
+            setCustomVoiceFile(null);
+            setVoiceModalOpen(false);
+          }}
+          onAudioUploaded={(file) => {
+            setSelectedVoice(null);
+            setCustomVoiceFile(file);
+            setVoiceModalOpen(false);
+          }}
         />
       </DialogContent>
     </Dialog>
