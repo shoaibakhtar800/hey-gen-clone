@@ -33,6 +33,8 @@ import {
   SelectValue,
 } from "../ui/select";
 import getCroppedImg from "~/utils/crop-image";
+import { getPresignedUrl } from "~/actions/generation";
+import { toast } from "sonner";
 
 const samplesPhotos = [
   {
@@ -108,6 +110,7 @@ export function PhotoToVideoModal({
 
   const handleGenerateVideo = async () => {
     setLoading(true);
+    toast.info("🎬 Video generation started — this may take a few seconds.");
 
     let photS3Key: string | null = null;
     let audioS3Key: string | null = null;
@@ -121,15 +124,81 @@ export function PhotoToVideoModal({
           selectedPhotoUrl,
           croppedAreaPixels,
         );
+
         if (croppedImage) {
-          fileToUpload = selectedPhotoFile;
+          fileToUpload = croppedImage.file;
         }
       } else if (selectedPhotoFile) {
         fileToUpload = selectedPhotoFile;
       }
 
       if (fileToUpload) {
+        const { url, key } = await getPresignedUrl(
+          fileToUpload.name,
+          fileToUpload.type,
+          "ptvPhoto"
+        );
+
+        await fetch(url, {
+          method: "PUT",
+          headers: {
+            "Content-Type": fileToUpload.type
+          },
+          body: fileToUpload
+        });
+
+        photS3Key = key;
+      } else {
+        const sample = samplesPhotos.find(p => p.url === selectedPhotoUrl);
+        photS3Key = sample ? sample.s3Key : null;
       }
+
+      if (selectedAudioUrl && selectedAudioName) {
+        const response = await fetch(selectedAudioUrl);
+        const audioBlob = await response.blob();
+        const audioFile = new File([audioBlob], selectedAudioName, {
+          type: audioBlob.type,
+        });
+
+        const { url, key } = await getPresignedUrl(
+          audioFile.name,
+          audioFile.type,
+          "ptvAudio"
+        );
+
+        await fetch(url, {
+          method: "PUT",
+          headers: {
+            "Content-Type": audioFile.type
+          },
+          body: audioFile
+        });
+
+        audioS3Key = key;
+      }
+
+      if (customVoiceFile) {
+        const { url, key } = await getPresignedUrl(
+          customVoiceFile.name,
+          customVoiceFile.type,
+          "ttsVoiceClone"
+        );
+
+        await fetch(url, {
+          method: "PUT",
+          headers: {
+            "Content-Type": customVoiceFile.type
+          },
+          body: customVoiceFile
+        });
+
+        voiceS3Key = key;
+      } else if (selectedVoice) {
+        voiceS3Key = selectedVoice.s3Key;
+      }
+
+      setLoading(false);
+      onOpenChange(false);
     }
   };
 
@@ -190,6 +259,7 @@ export function PhotoToVideoModal({
                   <div className="relative">
                     <img
                       src={selectedPhotoUrl}
+                      crossOrigin="anonymous"
                       className="max-h-[340px] max-w-full rounded-xl border object-contain md:max-w-[340px]"
                     />
                     <Button
