@@ -1,6 +1,7 @@
 import { db } from "~/server/db";
 import { inngest } from "./client";
 import { env } from "~/env";
+import { getPresignedUrl } from "~/lib/s3";
 
 export const photoToVideo = inngest.createFunction(
   {
@@ -76,6 +77,51 @@ export const photoToVideo = inngest.createFunction(
       }
 
       if (photoToVideo.experimentalModel) {
+        const [photoUrl, audioUrl] = await step.run(
+          "create-presigned-urls",
+          async () => {
+            const photo = await getPresignedUrl(photoToVideo.photoS3Key!);
+            const audio = await getPresignedUrl(
+              photoToVideo.drivingAudioS3Key!,
+            );
+            return [photo, audio];
+          },
+        );
+
+        const sieveJobResponse = await step.fetch("endpoint", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            function: "sieve/portrait-avatar",
+            inputs: {
+              source_image: { url: photoUrl },
+              driving_audio: { url: audioUrl },
+              backend: "model name",
+              enhancement: photoToVideo.enhancement ? "codeformer" : "none",
+            },
+            webhooks: [
+              {
+                type: "job.complete",
+                url: `https://${process.env.VERCEL_URL}/api/sieve`,
+              },
+            ],
+          }),
+        });
+
+        const sieveJob = (await sieveJobResponse.json()) as { id: string };
+
+        await step.run("update-db-with-sieve-job-id", async () => {
+          return await db.photoToVideoGeneration.update({
+            where: {
+              id: photoToVideo.id,
+            },
+            data: {
+              sieveJobId: sieveJob.id,
+            },
+          });
+        });
       } else {
         const videoResponse = await step.fetch(env.PHOTO_TO_VIDEO_ENDPOINT, {
           method: "POST",
