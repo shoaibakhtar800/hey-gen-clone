@@ -11,15 +11,17 @@ datasource db {
 }
 
 model User {
-  id            String    @id
-  name          String
-  email         String
-  emailVerified Boolean   @default(false)
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @default(now()) @updatedAt
-  sessions      Session[]
-  accounts      Account[]
+  id                      String                   @id
+  name                    String
+  email                   String
+  emailVerified           Boolean                  @default(false)
+  image                   String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @default(now()) @updatedAt
+  sessions                Session[]
+  accounts                Account[]
+  credits                 Int                      @default(100)
+  photoToVideoGenerations PhotoToVideoGeneration[]
 
   @@unique([email])
   @@map("user")
@@ -68,4 +70,30 @@ model Verification {
   updatedAt  DateTime @default(now()) @updatedAt
 
   @@map("verification")
+}
+
+model PhotoToVideoGeneration {
+  id                String  @id @default(cuid())
+  name              String
+  photoS3Key        String?
+  script            String?
+  drivingAudioS3Key String?
+  voiceS3Key        String?
+  expressiveness    Float?
+  enhancement       Boolean @default(false)
+  experimentalModel Boolean @default(false)
+  resolution        String? @default("512")
+
+  videoS3Key String?
+  status     String  @default("queued")
+
+  sieveJobId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("photo_to_video_generation")
 }
